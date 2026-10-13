@@ -237,6 +237,15 @@ function calculateRoute() {
     alert("該当する時間帯のバスが見つかりませんでした。時刻表の範囲内で基準時刻を設定してください。");
   }
 }
+function setCurrentTimeAsDefault() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+
+  document.getElementById('baseTime').value = `${hh}:${mm}`;
+}
+
+setCurrentTimeAsDefault();
 </script>
 </body>
 </html>
