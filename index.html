@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>最速ルート検索</title>
+  <style>
+    body { font-family: sans-serif; padding: 15px; background: #f5f5f5; color: #333; }
+    h1 { font-size: 1.2rem; }
+    .box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input, select, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; }
+    button { background: #007aff; color: white; border: none; font-weight: bold; cursor: pointer; }
+    .result { font-weight: bold; font-size: 1.1rem; color: #007aff; margin-top: 10px; }
+    .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 0.85rem; margin-bottom: 8px; }
+    .route-card { border: 1px solid #e5e7eb; border-radius: 7px; padding: 12px; margin-top: 10px; }
+    .route-card.best { border: 2px solid #007aff; background: #f4f9ff; }
+    .route-title { font-weight: bold; margin-bottom: 6px; }
+    .route-time { font-size: 1.05rem; font-weight: bold; color: #007aff; }
+    .route-meta { font-size: 0.9rem; line-height: 1.6; margin-top: 5px; }
+    .rank { display: inline-block; font-size: 0.8rem; background: #eee; padding: 2px 6px; border-radius: 4px; margin-right: 5px; }
+  </style>
+</head>
+<body>
+
+  <h1>最速バス・地下鉄ルート検索</h1>
+
+  <div class="box">
+    <label>区分</label>
+    <select id="dayType">
+      <option value="weekday">平日</option>
+      <option value="holiday">土休日</option>
+    </select>
+
+    <label>方向</label>
+    <select id="direction">
+      <option value="outbound">往路（自宅 → 地下鉄）</option>
+      <option value="inbound">復路（地下鉄 → 自宅）</option>
+    </select>
+
+    <label>基準時刻（例 18:00）</label>
+    <input type="time" id="baseTime" value="18:00">
+
+    <button onclick="calculateRoute()">最速ルートを検索</button>
+  </div>
+
+  <div class="box" id="resultBox" style="display:none;">
+    <div class="badge" id="bestRouteName"></div>
+    <div>最速の到着予定時刻: <span id="bestArrivalTime" class="result"></span></div>
+    <hr style="border:none; border-top:1px solid #eee; margin:10px 0;">
+    <div id="routeDetail" style="font-size:0.9rem; line-height:1.5;"></div>
+  </div>
+
+  <div class="box" id="allResultsBox" style="display:none;">
+    <h2 style="font-size:1.05rem; margin-top:0;">全ルート比較（到着が早い順）</h2>
+    <div id="allResults"></div>
+  </div>
+
+<script>
+const scheduleData = {
+  weekday: {
+    // ルート1: 稲 <-> 箕面萱野駅南
+    r1_out: [
+      "06:42", "07:02", "07:14", "07:24", "07:34", "07:44", "07:54", "08:04", "08:14", 
+      "08:24", "08:34", "08:47", "08:58", "09:13", "09:28", "09:43", "09:58", "10:13", 
+      "10:30", "10:50", "11:10", "11:30", "11:50", "12:10", "12:30", "12:50", "13:10", 
+      "13:30", "13:50", "14:10", "14:30", "14:50", "15:10", "15:30", "15:50", "16:10", 
+      "16:30", "16:50", "17:13", "17:33", "17:48", "18:03", "18:18", "18:33", "18:48", 
+      "19:03", "19:18", "19:33", "19:48", "20:03", "20:17", "20:32", "20:47", "21:02", 
+      "21:17", "21:32", "21:47", "22:07", "22:27", "22:47"
+    ],
+    r1_in: [
+      "06:02", "06:24", "06:34", "06:44", "06:52", "07:10", "07:20", "07:32", "07:42", 
+      "07:52", "08:02", "08:12", "08:22", "08:35", "08:55", "09:25", "09:44", "10:04", 
+      "10:24", "10:44", "11:04", "11:24", "11:44", "12:04", "12:24", "12:44", "13:04", 
+      "13:24", "13:44", "14:04", "14:24", "14:44", "15:04", "15:24", "15:44", "16:04", 
+      "16:24", "16:44", "16:59", "17:14", "17:29", "17:44", "17:59", "18:14", "18:29", 
+      "18:44", "18:59", "19:14", "19:29", "19:44", "19:59", "20:14", "20:28", "20:43", 
+      "21:03", "21:23", "21:43", "22:03"
+    ],
+    // ルート2: 中小学校前 <-> 箕面萱野駅
+    r2_out: [
+      "05:55", "06:32", "07:02", "07:22", "07:42", "08:02", "08:22", "08:57", "09:37", 
+      "10:37", "11:37", "12:37", "13:37", "14:33", "15:33", "16:33", "16:54", "17:33", 
+      "17:54", "18:33", "19:33", "21:32"
+    ],
+    r2_in: [
+      "07:25", "07:45", "08:20", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", 
+      "15:00", "16:00", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", 
+      "20:30", "21:00", "22:00", "23:12"
+    ],
+    // ルート3 平日 往路
+    r3_out: [
+      "06:22", "06:52", "07:12", "07:32", "08:12", "08:32", "09:26", "10:46", 
+      "11:26", "12:46", "13:26", "14:42", "15:26", "16:42", "17:26", "18:42", "19:26", "20:41"
+    ],
+    // ルート3 平日 復路
+    r3_in: [
+      "06:53", "07:33", "07:53", "08:12", "08:52", "09:12", "10:07", "11:27", 
+      "12:07", "13:27", "14:07", "15:27", "16:07", "17:22", "18:07", "19:22", "20:07", "21:22"
+    ]
+  },
+  holiday: {
+    r1_out: [
+      "06:57", "07:12", "07:27", "07:42", "07:57", "08:09", "08:24", "08:39", "08:54", 
+      "09:09", "09:25", "09:40", "09:55", "10:10", "10:30", "10:50", "11:10", "11:30", 
+      "11:50", "12:10", "12:30", "12:50", "13:10", "13:30", "13:50", "14:10", "14:30", 
+      "14:50", "15:10", "15:30", "15:50", "16:10", "16:30", "16:50", "17:13", "17:33", 
+      "17:48", "18:03", "18:18", "18:33", "18:48", "19:03", "19:18", "19:33", "19:48", 
+      "20:03", "20:17", "20:32", "20:47", "21:02", "21:17", "21:32", "21:47", "22:07", 
+      "22:27", "22:47"
+    ],
+    r1_in: [
+      "06:19", "06:34", "06:49", "07:05", "07:16", "07:27", "07:40", "07:52", "08:07", 
+      "08:22", "08:37", "08:52", "09:07", "09:22", "09:43", "10:03", "10:23", "10:43", 
+      "11:03", "11:23", "11:43", "12:03", "12:23", "12:43", "13:03", "13:23", "13:43", 
+      "14:03", "14:23", "14:43", "15:03", "15:23", "15:43", "16:03", "16:24", "16:44", 
+      "16:59", "17:14", "17:29", "17:44", "17:59", "18:14", "18:29", "18:44", "18:59", 
+      "19:14", "19:29", "19:44", "19:59", "20:14", "20:27", "20:42", "21:02", "21:22", "22:02"
+    ],
+    r2_out: [
+      "07:22", "07:42", "08:22", "08:57", "09:37", "10:18", "12:18", "14:18", "16:18", 
+      "17:33", "18:33", "19:33", "21:32"
+    ],
+    r2_in: [
+      "07:45", "09:00", "10:00", "11:00", "13:00", "15:00", "17:00", "18:00", "19:00", 
+      "20:00", "21:00", "22:00", "23:12"
+    ],
+    r3_out: [
+      "06:52", "08:12", "09:26", "10:46", "11:26", "12:46", "13:26", 
+      "14:42", "15:26", "16:42", "17:26", "18:42"
+    ],
+    r3_in: [
+      "07:33", "08:47", "10:07", "11:27", "12:07", "13:27", "14:07", 
+      "15:27", "16:07", "17:22", "18:07", "19:22", "20:22"
+    ]
+  }
+};
+
+const routes = {
+  r1: { name: "ルート1: 稲 ↔ 箕面萱野駅南 (92系統)", walkToBus: 5, busTime: 5, walkToSubway: 10 },
+  r2: { name: "ルート2: 中小学校前 ↔ 箕面萱野駅 (181/182系統)", walkToBus: 5, busTime: 11, walkToSubway: 5 },
+  r3: { name: "ルート3: 中小学校前 ↔ 箕面船場阪大前 (81/82系統)", walkToBus: 5, busTime: 7, walkToSubway: 2 }
+};
+
+function timeToMin(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minToTime(m) {
+  const h = Math.floor(m / 60) % 24;
+  const min = m % 60;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+function calculateRoute() {
+  const day = document.getElementById('dayType').value;
+  const dir = document.getElementById('direction').value;
+  const baseTimeStr = document.getElementById('baseTime').value;
+
+  if (!baseTimeStr) {
+    alert("基準時刻を入力してください。");
+    return;
+  }
+
+  const baseMin = timeToMin(baseTimeStr);
+  const candidates = [];
+
+  ['r1', 'r2', 'r3'].forEach(rKey => {
+    const r = routes[rKey];
+    const times = scheduleData[day][`${rKey}_${dir === 'outbound' ? 'out' : 'in'}`];
+    if (!times || times.length === 0) return;
+
+    if (dir === 'outbound') {
+      // 自宅からバス停まで歩く時間を考慮し、間に合う次のバスを検索
+      const minBusDep = baseMin + r.walkToBus;
+      const busDep = times.map(timeToMin).find(t => t >= minBusDep);
+      if (busDep !== undefined) {
+        const subwayArr = busDep + r.busTime + r.walkToSubway;
+        candidates.push({
+          key: rKey,
+          name: r.name,
+          busDep: minToTime(busDep),
+          arrTime: minToTime(subwayArr),
+          arrMin: subwayArr,
+          detail: `自宅発: ${baseTimeStr}<br>バス発: ${minToTime(busDep)}<br>地下鉄着: ${minToTime(subwayArr)}`
+        });
+      }
+    } else {
+      // 地下鉄駅からバス停まで歩く時間を考慮し、間に合う次のバスを検索
+      const minBusDep = baseMin + r.walkToSubway;
+      const busDep = times.map(timeToMin).find(t => t >= minBusDep);
+      if (busDep !== undefined) {
+        const homeArr = busDep + r.busTime + r.walkToBus;
+        candidates.push({
+          key: rKey,
+          name: r.name,
+          busDep: minToTime(busDep),
+          arrTime: minToTime(homeArr),
+          arrMin: homeArr,
+          detail: `地下鉄側の基準時刻: ${baseTimeStr}<br>バス発: ${minToTime(busDep)}<br>自宅着: ${minToTime(homeArr)}`
+        });
+      }
+    }
+  });
+
+  const resultBox = document.getElementById('resultBox');
+  const allResultsBox = document.getElementById('allResultsBox');
+  const allResults = document.getElementById('allResults');
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => a.arrMin - b.arrMin);
+    const best = candidates[0];
+
+    resultBox.style.display = 'block';
+    allResultsBox.style.display = 'block';
+    document.getElementById('bestRouteName').innerText = best.name;
+    document.getElementById('bestArrivalTime').innerText = best.arrTime;
+    document.getElementById('routeDetail').innerHTML = best.detail;
+
+    allResults.innerHTML = candidates.map((candidate, index) => `
+      <div class="route-card ${index === 0 ? 'best' : ''}">
+        <div class="route-title"><span class="rank">${index + 1}位</span>${candidate.name}</div>
+        <div>到着予定時刻: <span class="route-time">${candidate.arrTime}</span></div>
+        <div class="route-meta">
+          バス発: ${candidate.busDep}<br>
+          ${candidate.detail}
+        </div>
+        ${index === 0 ? '<div style="margin-top:7px;font-weight:bold;color:#007aff;">最速ルート</div>' : ''}
+      </div>
+    `).join('');
+  } else {
+    resultBox.style.display = 'none';
+    allResultsBox.style.display = 'none';
+    allResults.innerHTML = '';
+    alert("該当する時間帯のバスが見つかりませんでした。時刻表の範囲内で基準時刻を設定してください。");
+  }
+}
+</script>
+</body>
+</html>
